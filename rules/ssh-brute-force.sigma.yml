@@ -1,0 +1,63 @@
+title: SSH Failed Password Login
+name: ssh_failed_login
+status: experimental
+description: A failed SSH password login (ECS field names).
+logsource:
+  product: linux
+  service: sshd
+detection:
+  selection:
+    event.outcome: failure
+  condition: selection
+level: low
+---
+title: SSH Successful Password Login
+name: ssh_successful_login
+status: experimental
+description: A successful SSH password login (ECS field names).
+logsource:
+  product: linux
+  service: sshd
+detection:
+  selection:
+    event.outcome: success
+  condition: selection
+level: informational
+---
+title: SSH Brute Force - 6+ Failed Logins from One IP in 60s
+name: ssh_brute_force
+status: experimental
+description: Six or more failed SSH logins from one source IP within 60 seconds.
+correlation:
+  type: event_count
+  rules:
+    - ssh_failed_login
+  group-by:
+    - source.ip
+  timespan: 60s
+  condition:
+    gte: 6
+tags:
+  - attack.credential-access
+  - attack.t1110
+  - attack.t1110.001
+level: high
+---
+title: SSH Brute Force Followed by Successful Login
+name: ssh_brute_force_then_success
+status: experimental
+description: A brute-force burst followed by a successful login from the same IP within 30 minutes.
+correlation:
+  type: temporal_ordered
+  rules:
+    - ssh_brute_force
+    - ssh_successful_login
+  group-by:
+    - source.ip
+  timespan: 30m
+tags:
+  - attack.credential-access
+  - attack.t1110.001
+  - attack.initial-access
+  - attack.t1078
+level: critical

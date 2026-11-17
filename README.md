@@ -43,7 +43,6 @@ docker compose up -d logstash
 > was already running on 9200 on my machine. Inside Docker, Logstash and Kibana still
 > use `elasticsearch:9200`.
 >
-> Security (`xpack.security`) is disabled for this local lab only. Do not do this on a real server.
 
 ## Synthetic log
 
@@ -109,5 +108,92 @@ possible compromise. This will be handled in the incident response playbook (Tas
 
 ## Next steps
 
-- Task 2: detection rules for brute-force attempts
+- Task 2: detection rules (done, see below)
+- Task 3: incident response playbook and handover
+
+---
+
+# Task 2: Detection Rules for Brute-Force
+
+Two custom Elastic Security detection rules (EQL) that flag SSH brute-force attacks on the
+`ssh-auth-*` index and raise alerts in Kibana. Full details are in
+[`docs/detection-rules.md`](docs/detection-rules.md).
+
+## What changed from Task 1
+
+- **Security is now enabled** in Elasticsearch (`xpack.security.enabled=true`), because Kibana
+  detection rules run in the background with an API key. Kibana needs an encryption key for the same reason.
+- Passwords and keys live in a local `.env` file (not in Git). Create it with:
+
+```bash
+cat > .env << EOT
+ELASTIC_PASSWORD=$(openssl rand -hex 12)
+KIBANA_PASSWORD=$(openssl rand -hex 12)
+KIBANA_ENC_KEY=$(openssl rand -hex 32)
+EOT
+chmod 600 .env
+```
+
+- After Elasticsearch starts, set the Kibana system password, then start Kibana and Logstash:
+
+```bash
+set -a; source .env; set +a
+docker compose up -d elasticsearch
+curl -u "elastic:$ELASTIC_PASSWORD" -X POST "http://localhost:9201/_security/user/kibana_system/_password" \
+  -H 'Content-Type: application/json' -d "{\"password\":\"$KIBANA_PASSWORD\"}"
+docker compose up -d kibana logstash
+```
+
+- Log in to Kibana at http://localhost:5601 with user `elastic` and the `ELASTIC_PASSWORD` from `.env`.
+- Logstash now maps the logs to **Elastic Common Schema (ECS)** fields (`source.ip`,
+  `event.outcome`, `event.category`, `user.name`, `host.name`, `process.name`). The old fields are kept, so the Task 1 dashboard still works.
+
+## Rules
+
+| # | Rule | Severity | MITRE ATT&CK |
+|---|---|---|---|
+| 1 | SSH Brute Force: 6+ Failed Logins from One IP in 60s | High | T1110, T1110.001 |
+| 2 | SSH Brute Force Followed by Successful Login | **Critical** | T1110.001, T1078 |
+
+```
+# Rule 1
+sequence by source.ip with maxspan=60s
+  [ any where event.outcome == "failure" ] with runs=5
+  [ any where event.outcome == "failure" ]
+
+# Rule 2
+sequence by source.ip with maxspan=30m
+  [ any where event.outcome == "failure" ] with runs=6
+  [ any where event.outcome == "success" ]
+```
+
+## Test result (synthetic log of 15 Nov 2026)
+
+| Source IP | Failed logins | Alerts |
+|---|---|---|
+| 185.220.101.45 | 120 | Rule 1 alerts + 1 **Critical** (successful login as `admin` after the burst) |
+| 45.155.205.233 | 75 | Rule 1 alerts |
+| 103.151.122.18 | 40 | Rule 1 alerts |
+| 192.168.1.x (staff) | 10 typos | none (no false positives) |
+
+Total: 221 alerts (220 High, 1 Critical).
+
+| Screenshot | File |
+|---|---|
+| Rule 1 details with MITRE mapping | `screenshots/06-rule-created.png` |
+| Alerts grouped by source IP | `screenshots/07-alerts.png` |
+| Critical alert | `screenshots/08-critical-alert.png` |
+| Rules list (High + Critical, enabled) | `screenshots/09-rules-list.png` |
+| Kibana login (security on) | `screenshots/10-kibana-login-security-on.png` |
+
+![Rules list](screenshots/09-rules-list.png)
+
+## Files
+
+- `rules/mehfil-ssh-detection-rules.ndjson`: both rules exported from Kibana (import with Security, Rules, Import rules)
+- `rules/ssh-brute-force.sigma.yml`: the same logic in Sigma format
+- `docs/detection-rules.md`: logic, MITRE mapping, ECS fields, test results, limitations
+
+## Next step
+
 - Task 3: incident response playbook and handover
