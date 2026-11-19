@@ -197,3 +197,51 @@ Total: 221 alerts (220 High, 1 Critical).
 ## Next step
 
 - Task 3: incident response playbook and handover
+
+---
+
+# Task 3: Incident Response Playbook and Handover
+
+| Deliverable | Where |
+|---|---|
+| Incident response playbook (PDF) | [`docs/Mehfil_Incident_Response_Playbook.pdf`](docs/Mehfil_Incident_Response_Playbook.pdf) |
+| Demo video (ingestion to alert, about 2 minutes) | [Watch the demo](https://youtu.be/https://youtu.be/RZEsbrDVuoA) |
+
+The playbook covers **triage** (how to read an alert and decide), **verification** (how to check for a
+false positive in Kibana and on the server) and **containment** (blocking an IP with UFW, and the steps for
+a Critical alert where an attacker logged in).
+
+## How to run the pipeline
+
+```bash
+cd mehfil-soc-pipeline
+# 1. create .env (see the Task 2 section), then:
+set -a; source .env; set +a
+docker compose up -d elasticsearch
+# 2. set the Kibana password once (see Task 2), then:
+docker compose up -d kibana logstash
+python3 scripts/generate_auth_log.py     # regenerate the synthetic log if needed
+docker compose ps                        # all three should be "Up"
+```
+
+Open Kibana at http://localhost:5601 (user `elastic`, password from `.env`).
+Check ingestion: `curl -u "elastic:$ELASTIC_PASSWORD" "http://localhost:9201/ssh-auth-*/_count?pretty"` should show 253 events.
+
+## How to read the dashboard and alerts
+
+| Where in Kibana | What it shows | What to look for |
+|---|---|---|
+| Dashboard, **Mehfil SSH Monitoring**, "Failed SSH Logins per Hour" | Failed logins per hour | Spikes (the test data peaks at 03:00, 14:00 and 21:00) |
+| Same dashboard, "Top Attacking IPs" | Failed logins per source IP | An outside IP with many failures |
+| Same dashboard, "Failed vs Successful Logins" | Ratio of outcomes | A sudden drop in the failure share |
+| Security, **Alerts**, grouped by Source IP | One group per attacker | **High** = brute force. **Critical** = brute force followed by a successful login (act at once) |
+
+What to do with an alert is described step by step in the playbook (sections 4 to 6).
+
+## Project summary
+
+| Task | Result |
+|---|---|
+| 1. Log aggregation | ELK in Docker, synthetic `auth.log` (245 failed, 8 successful), top 3 attacking IPs with grep and awk, Kibana dashboard |
+| 2. Detection rules | Two EQL rules (High and Critical) mapped to MITRE ATT&CK, 221 alerts on the test log, no false positives |
+| 3. Playbook and handover | Incident response playbook, UFW blocking steps, demo video |
