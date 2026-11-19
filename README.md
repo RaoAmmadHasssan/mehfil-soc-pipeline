@@ -205,7 +205,7 @@ Total: 221 alerts (220 High, 1 Critical).
 | Deliverable | Where |
 |---|---|
 | Incident response playbook (PDF) | [`docs/Mehfil_Incident_Response_Playbook.pdf`](docs/Mehfil_Incident_Response_Playbook.pdf) |
-| Demo video (ingestion to alert, about 2 minutes) | [Watch the demo](https://youtu.be/https://youtu.be/RZEsbrDVuoA) |
+| Demo video (ingestion to alert, about 2 minutes) | [Watch the demo](https://youtu.be/RZEsbrDVuoA) |
 
 The playbook covers **triage** (how to read an alert and decide), **verification** (how to check for a
 false positive in Kibana and on the server) and **containment** (blocking an IP with UFW, and the steps for
